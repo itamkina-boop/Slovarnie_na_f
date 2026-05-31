@@ -1,16 +1,464 @@
-<!doctype html>
-<html>
-<body>
-  <div class="container">
-    <h1>hello, world</h1>
-    <hr>
-    <p>
-      <a href="#" class="btn btn-primary btn-lg" id="alert">alert</a>
-    </p>
-  </div>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Словарный отскок</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;font-family:-apple-system,system-ui,sans-serif}
+body{background:linear-gradient(160deg,#1a1a2e,#16213e);overflow:hidden;height:100vh;user-select:none}
+#hud{position:fixed;top:0;left:0;right:0;z-index:20;padding:6px 12px;display:flex;justify-content:space-between;color:#fff;font-weight:700;font-size:14px;text-shadow:0 1px 3px #000;background:linear-gradient(rgba(0,0,0,.4),transparent);pointer-events:none}
+#wordBox{position:fixed;top:32px;left:50%;transform:translateX(-50%);z-index:20;background:rgba(255,255,255,.92);border-radius:14px;padding:8px 14px;box-shadow:0 4px 14px rgba(0,0,0,.4);text-align:center;max-width:96vw;overflow:hidden}
+#wordTxt{font-size:24px;font-weight:800;letter-spacing:2px;color:#1a1a2e;white-space:nowrap;display:inline-block}
+#wordTxt .gap{display:inline-block;min-width:20px;color:#e94560;border-bottom:3px solid #e94560;animation:blink 1s infinite}
+#wordTxt .done{color:#27ae60;font-weight:900}
+@keyframes blink{50%{opacity:.3}}
+#dangerLine{position:fixed;left:0;right:0;z-index:5;height:2px;background:repeating-linear-gradient(90deg,#e94560 0 12px,transparent 12px 24px);opacity:.5}
 
-  <script src="vendor/jquery.min.js"></script>
-  <script src="vendor/bootstrap/js/bootstrap.min.js"></script>
-  <script src="script.js"></script>
+#field{position:fixed;inset:0;z-index:1}
+.emoji{position:absolute;display:flex;align-items:center;justify-content:center;will-change:transform}
+.trash{filter:grayscale(1) brightness(.5);opacity:.65}
+.active{filter:drop-shadow(0 0 10px #fff)}
+.pop{animation:pop .4s ease-out forwards}
+@keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.6)}100%{transform:scale(0);opacity:0}}
+
+#keys{position:fixed;bottom:12px;left:0;right:0;z-index:20;padding:0 8px;display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.key{padding:18px 0;border:none;border-radius:14px;font-size:26px;font-weight:800;color:#fff;background:rgba(15,52,96,.9);box-shadow:0 4px 0 rgba(10,37,71,.95);cursor:pointer;transition:.1s}
+.key:active{transform:translateY(2px)}
+.key.bad{background:rgba(192,57,43,.9);animation:shake .3s}
+.key.good{background:rgba(39,174,96,.95)}
+.key.dim{background:rgba(40,50,80,.35);color:rgba(255,255,255,.25);box-shadow:none;pointer-events:none}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+.screen{position:fixed;inset:0;z-index:50;background:rgba(15,15,35,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center;padding:24px;overflow-y:auto}
+.hide{display:none}
+.screen h1{font-size:26px;margin-bottom:14px}
+.screen p{font-size:15px;line-height:1.6;margin-bottom:14px;max-width:360px}
+.bigbtn{padding:14px 28px;border:none;border-radius:28px;font-size:16px;font-weight:700;color:#fff;background:linear-gradient(145deg,#e94560,#ff6b81);box-shadow:0 6px 18px rgba(233,69,96,.5);cursor:pointer;margin:5px}
+.bigbtn.alt{background:linear-gradient(145deg,#0f3460,#2a6fb0);box-shadow:0 6px 18px rgba(15,52,96,.5)}
+.bigbtn.warn{background:linear-gradient(145deg,#f39c12,#f1c40f);color:#1a1a2e;box-shadow:0 6px 18px rgba(243,156,18,.5)}
+#mistakeWrap{width:100%;max-width:360px}
+#mistakeList{max-height:32vh;overflow-y:auto;background:rgba(255,255,255,.08);border-radius:12px;padding:10px 14px;margin-bottom:14px;text-align:left}
+.mw{font-size:16px;font-weight:700;color:#ffd166;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.1)}
+.mw:last-child{border-bottom:none}
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <span>⭐ <span id="score">0</span></span>
+  <span id="progBox">📚 <span id="prog">0</span>/<span id="total">0</span></span>
+  <span id="livesBox">❤️ <span id="lives">5</span></span>
+</div>
+
+<div id="wordBox"><div id="wordTxt"></div></div>
+<div id="dangerLine"></div>
+<div id="field"></div>
+<div id="keys"></div>
+
+<div id="startScreen" class="screen">
+  <h1>😀 Словарный отскок</h1>
+  <p>Слово вверху — впиши пропуск, <b>пока смайл падает</b>!<br><br>Буквы внизу: <b>А · О · Е · И · Ы</b>. Яркие — можно нажать.<br><br>Коснулся пола — мусор 🗑️. Исправишь — мусор исчезнет 💥<br><br>⚡ Режим «на скорость» — бесконечный, играй пока поле не заполнится!</p>
+  <button id="btnKnow" class="bigbtn">📚 Проверка знаний</button>
+  <button id="btnSpeed" class="bigbtn alt">⚡ На скорость</button>
+</div>
+
+<div id="endScreen" class="screen hide">
+  <h1 id="endTitle"></h1>
+  <p id="endText"></p>
+  <div id="mistakeWrap" class="hide">
+    <p style="margin-bottom:6px"><b>📝 Слова с ошибками:</b></p>
+    <div id="mistakeList"></div>
+    <button id="btnMistakes" class="bigbtn warn">📝 Работа над ошибками</button>
+  </div>
+  <div>
+    <button id="btnRestart" class="bigbtn">🔄 Заново</button>
+    <button id="btnMenu" class="bigbtn alt">🏠 В меню</button>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+
+const SLOTS = ['а','о','е','и','ы'];
+
+const WORDS=[
+  ["ф_нтастика","а","🚀"],
+  ["ф_нтастический","а","👽"],
+  ["ф_ст_валь","е,и","🎉"],
+  ["ф_гура","и","⛸️"],
+  ["ф_гурировать","и","🎭"],
+  ["ф_гурист","и","🤸"],
+  ["ф_гурный","и","🌀"],
+  ["ф_нансы","и","💰"],
+  ["ф_нансовый","и","🏦"],
+  ["ф_олетовый","и","🟣"],
+  ["фр_гмент","а","🧩"],
+  ["фр_гментарный","а","🧩"],
+  ["фраз_ология","е","💬"],
+  ["фраз_ологический","е","💭"],
+  ["ха_с","о","🌪️"],
+  ["ха_тичный","о","🌀"],
+  ["х_рактер","а","🎭"],
+  ["х_рактерный","а","🎭"],
+  ["х_рактеризовать","а","🗣️"],
+  ["ц_мент","е","🧱"],
+  ["ц_ментный","е","🏗️"],
+  ["ц_вилизация","и","🏛️"],
+  ["ц_вилизационный","и","🏛️"],
+  ["ц_вилизованный","и","🤝"],
+  ["ц_клон","и","🌀"],
+  ["ц_линдр","и","🎩"],
+  ["ц_линдрический","и","🎩"],
+  ["ц_стерна","и","🛢️"],
+  ["ц_тата","и","📜"],
+  ["ц_тировать","и","✒️"],
+  ["ч_ловек","е","🧍"],
+  ["ч_ловеческий","е","🧠"],
+  ["ч_ловечный","е","❤️"],
+  ["ч_мпион","е","🏆"],
+  ["ч_мпионат","е","🥇"],
+  ["ч_мпионский","е","🎖️"],
+  ["ш_ренга","е","🪖"],
+  ["ш_колад","о","🍫"],
+  ["ш_коладный","о","🍫"],
+  ["ш_ссе","о","🛣️"],
+  ["ш_ссейный","о","🛣️"],
+  ["ш_фёр","о","🚗"],
+  ["ш_фёрский","о","🚙"],
+  ["эв_люция","о","🐒"],
+  ["эв_люционировать","о","🦍"],
+  ["эк_номика","о","📈"],
+  ["эк_номический","о","📊"],
+  ["эк_номичный","о","💡"],
+  ["эксп_р_мент","е,и","🧪"],
+  ["эксп_р_ментальный","е,и","🔬"],
+  ["эксп_р_ментировать","е,и","⚗️"],
+  ["эксп_нат","о","🖼️"],
+  ["экстр_мальный","е","🪂"],
+  ["эл_ктроника","е","🔌"],
+  ["эл_ктрический","е","💡"],
+  ["эл_ктричество","е","⚡"],
+  ["энц_кл_педия","и,о","📚"],
+  ["энц_кл_педист","и,о","🎓"],
+  ["энц_кл_педический","и,о","📖"],
+  ["эст_када","а","🌉"]
+];
+
+const HINTS = WORDS.map(w=>{
+  const word = w[0];
+  const gaps = w[1].split(',');
+  const positions=[];
+  for(let i=0;i<word.length;i++) if(word[i]==='_') positions.push(i);
+  return gaps.map((letter,gi)=>{
+    const pos = positions[gi];
+    const prev = pos>0 ? word[pos-1] : '';
+    if(prev==='ц' && letter==='и') return ['и','е','ы'];
+    const wide={
+      'о':['о','а','и','е'],
+      'а':['а','о','и','е'],
+      'е':['е','и','а'],
+      'и':['и','е','ы','а']
+    };
+    let arr = (wide[letter]||[letter]).filter(x=>SLOTS.includes(x));
+    if(!arr.includes(letter)) arr.unshift(letter);
+    return arr;
+  });
+});
+
+$('total').textContent=WORDS.length;
+console.log('Всего слов:', WORDS.length);
+
+const SIZE=56, MAXLIVES=5, GRACE=300;
+const G_KNOW = 0.10;
+const G_SPEED_BASE = 0.16;
+const G_SPEED_STEP = 0.013;
+const G_SPEED_MAX  = 0.50;
+const VY_TERMINAL  = 9;
+
+let mode,score,cleared,totalToPlay,lives,queue,current,emojis=[],raf;
+let mistakes=new Set();
+let lastIndexList=null;
+const field=$('field');
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+function start(m, indexList){
+  mode=m;score=0;cleared=0;lives=MAXLIVES;
+  mistakes=new Set();
+  emojis.forEach(e=>e.el.remove());emojis=[];
+  if(indexList && indexList.length){
+    queue = shuffle([...indexList]);
+    lastIndexList = [...indexList];
+  } else {
+    queue=[...Array(WORDS.length).keys()];
+    if(m==='speed')shuffle(queue);
+    lastIndexList = null;
+  }
+  totalToPlay = queue.length;
+  $('total').textContent = (m==='speed') ? '∞' : totalToPlay;
+  $('progBox').style.display = (m==='speed') ? 'none' : '';
+  $('livesBox').style.display = (m==='speed') ? 'none' : '';
+  $('startScreen').classList.add('hide');$('endScreen').classList.add('hide');
+  $('dangerLine').style.top=(innerHeight*0.30)+'px';
+  buildKeysSkeleton();
+  updateHud();nextWord();
+  if(!raf)loop();
+}
+
+function nextWord(){
+  if(queue.length===0){
+    if(mode==='speed'){
+      queue=[...Array(WORDS.length).keys()];
+      shuffle(queue);
+    } else {
+      return win();
+    }
+  }
+  const wi=queue.shift();const w=WORDS[wi];
+  current={wi,word:w[0],ans:w[1].split(','),emoji:w[2],
+           filled:[],gapPos:0,gaps:w[1].split(',').length,errored:false,answered:false};
+  renderWord();updateKeys();spawnEmoji();
+}
+
+function renderWord(){
+  let html='',gi=0;
+  for(const ch of current.word){
+    if(ch==='_'){
+      if(gi<current.gapPos)html+='<span class="done">'+current.filled[gi]+'</span>';
+      else html+='<span class="gap">'+(gi===current.gapPos?'?':'_')+'</span>';
+      gi++;
+    }else html+=ch;
+  }
+  $('wordTxt').innerHTML=html;
+  fitWord();
+}
+
+function fitWord(){
+  const t=$('wordTxt');
+  t.style.fontSize='24px';
+  t.style.letterSpacing='2px';
+  const maxW = innerWidth*0.9;
+  let size=24;
+  while(t.scrollWidth>maxW && size>13){
+    size--; t.style.fontSize=size+'px';
+    if(size<18) t.style.letterSpacing='1px';
+  }
+}
+
+function buildKeysSkeleton(){
+  $('keys').innerHTML='';
+  SLOTS.forEach(L=>{
+    const b=document.createElement('button');
+    b.className='key dim';b.textContent=L.toUpperCase();
+    b.dataset.letter=L;
+    b.onclick=()=>choose(L,b);
+    $('keys').appendChild(b);
+  });
+}
+
+function updateKeys(){
+  const allowed = HINTS[current.wi][current.gapPos];
+  document.querySelectorAll('.key').forEach(b=>{
+    b.classList.remove('bad','good');
+    if(allowed.includes(b.dataset.letter))b.classList.remove('dim');
+    else b.classList.add('dim');
+  });
+}
+
+function choose(letter,btn){
+  if(current.answered)return;
+  if(letter===current.ans[current.gapPos]){
+    btn.classList.add('good');
+    current.filled[current.gapPos]=letter.toUpperCase();
+    current.gapPos++;renderWord();
+    if(current.gapPos>=current.gaps){
+      current.answered=true;
+      score+=current.errored?5:15;cleared++;
+      popEmoji(current.idEmoji);removeTrashOf(current.wi);
+      updateHud();setTimeout(nextWord,300);
+    }else setTimeout(updateKeys,180);
+  }else{
+    btn.classList.add('bad');
+    current.errored=true;
+    mistakes.add(current.wi);
+    fail();
+  }
+}
+
+function fail(){
+  if(current.answered)return;
+  current.answered=true;
+  mistakes.add(current.wi);
+  if(mode==='know')lives--;
+  score=Math.max(0,score-3);
+  makeTrash(current.idEmoji,current.wi);
+  scheduleRetry(current.wi);
+  updateHud();
+  if(mode==='know' && lives<=0)return;
+  setTimeout(nextWord,350);
+}
+
+function scheduleRetry(wi){
+  const off=Math.min(queue.length,3+Math.floor(Math.random()*6));
+  queue.splice(off,0,wi);
+}
+
+function spawnEmoji(){
+  const el=document.createElement('div');
+  el.className='emoji active';el.textContent=current.emoji;
+  el.style.width=SIZE+'px';el.style.height=SIZE+'px';el.style.fontSize=(SIZE-12)+'px';
+  field.appendChild(el);
+  const startY = current.gaps>=2 ? -120 : 100;
+  const obj={el,wi:current.wi,trash:false,active:true,r:SIZE/2,
+    born:performance.now(),
+    x:Math.random()*(innerWidth-SIZE),y:startY,
+    vx:(Math.random()*2-1)*1.2,
+    vy:0};
+  emojis.push(obj);current.idEmoji=obj;
+}
+function makeTrash(obj,wi){
+  if(!obj)return;
+  obj.trash=true;obj.active=false;obj.wi=wi;
+  obj.el.classList.remove('active');obj.el.classList.add('trash');
+}
+function popEmoji(obj){
+  if(!obj)return;obj.el.classList.add('pop');const o=obj;
+  emojis=emojis.filter(e=>e!==o);setTimeout(()=>o.el.remove(),400);
+}
+function removeTrashOf(wi){
+  const keep=[];let restored=0;
+  emojis.forEach(o=>{
+    if(o.trash&&o.wi===wi){o.el.classList.add('pop');restored++;
+      setTimeout(()=>o.el.remove(),400);}
+    else keep.push(o);
+  });
+  emojis=keep;
+  if(restored && mode==='know')lives=Math.min(MAXLIVES,lives+1);
+  if(restored)score+=2*restored;
+  updateHud();
+}
+
+function currentGravity(){
+  if(mode==='know')return G_KNOW;
+  return Math.min(G_SPEED_MAX, G_SPEED_BASE + cleared*G_SPEED_STEP);
+}
+
+function loop(){
+  const G = currentGravity();
+  const BOUNCE=0.55,W=innerWidth,H=innerHeight,floor=H-130;
+  let activeTouched=false;
+
+  emojis.forEach(o=>{
+    o.vy+=G;
+    if(o.vy>VY_TERMINAL)o.vy=VY_TERMINAL;
+    o.x+=o.vx;o.y+=o.vy;
+    if(o.x<0){o.x=0;o.vx=-o.vx*BOUNCE}
+    if(o.x>W-SIZE){o.x=W-SIZE;o.vx=-o.vx*BOUNCE}
+    if(o.y<-200){o.y=-200;o.vy=Math.abs(o.vy)*BOUNCE}
+    if(o.y>floor){
+      o.y=floor;o.vy=-o.vy*BOUNCE;o.vx*=0.85;
+      if(o.active)activeTouched=true;
+      if(Math.abs(o.vy)<1)o.vy=0;
+    }
+  });
+
+  for(let i=0;i<emojis.length;i++)for(let j=i+1;j<emojis.length;j++){
+    const a=emojis[i],b=emojis[j];
+    const dx=(b.x-a.x),dy=(b.y-a.y);
+    const dist=Math.hypot(dx,dy)||0.01,min=SIZE*0.9;
+    if(dist<min){
+      if(a.active||b.active)activeTouched=true;
+      const ov=(min-dist)/2,nx=dx/dist,ny=dy/dist;
+      a.x-=nx*ov;a.y-=ny*ov;b.x+=nx*ov;b.y+=ny*ov;
+      const p=(a.vx*nx+a.vy*ny)-(b.vx*nx+b.vy*ny);
+      if(p>0){a.vx-=p*nx*BOUNCE;a.vy-=p*ny*BOUNCE;
+              b.vx+=p*nx*BOUNCE;b.vy+=p*ny*BOUNCE;}
+    }
+  }
+
+  let topY=floor;
+  emojis.forEach(o=>{
+    o.x=Math.max(0,Math.min(W-SIZE,o.x));
+    o.el.style.transform=`translate(${o.x}px,${o.y}px)`;
+    if(o.trash&&o.y<topY)topY=o.y;
+  });
+
+  if(activeTouched && current && !current.answered && current.idEmoji
+     && performance.now()-current.idEmoji.born>GRACE){
+    fail();
+  }
+
+  const trashCount=emojis.filter(e=>e.trash).length;
+  const knowLose = (mode==='know' && lives<=0);
+  const heapLose = (topY<innerHeight*0.30 && trashCount>=5);
+  if(knowLose || heapLose)return gameOver();
+  raf=requestAnimationFrame(loop);
+}
+
+function updateHud(){
+  $('score').textContent=score;
+  $('prog').textContent=cleared;
+  $('lives').textContent='❤️'.repeat(Math.max(0,lives))||'💀';
+}
+
+function buildMistakeList(){
+  const wrap=$('mistakeWrap'),list=$('mistakeList');
+  list.innerHTML='';
+  if(mistakes.size===0){wrap.classList.add('hide');return;}
+  wrap.classList.remove('hide');
+  [...mistakes].forEach(wi=>{
+    const w=WORDS[wi],ans=w[1].split(',');
+    let gi=0,pretty='';
+    for(const ch of w[0]){
+      if(ch==='_'){pretty+='<span style="color:#27ae60">'+ans[gi].toUpperCase()+'</span>';gi++;}
+      else pretty+=ch;
+    }
+    const d=document.createElement('div');
+    d.className='mw';d.innerHTML=w[2]+' '+pretty;
+    list.appendChild(d);
+  });
+}
+
+function gameOver(){
+  cancelAnimationFrame(raf);raf=null;
+  $('endScreen').classList.remove('hide');
+  $('endTitle').textContent='🗑️ Поле заполнено!';
+  $('endText').innerHTML=(mode==='speed')
+    ? "Скорость доконала 😅<br>Очки: <b>"+score+"</b> · Слов сложено: <b>"+cleared+"</b>"
+    : "Поле переполнено 😅<br>Очки: <b>"+score+"</b> · Сложено: <b>"+cleared+"</b>";
+  buildMistakeList();
+}
+function win(){
+  cancelAnimationFrame(raf);raf=null;
+  $('endScreen').classList.remove('hide');
+  $('endTitle').textContent= mistakes.size===0 ? '🎓 Без ошибок!' : '🎉 Все слова пройдены!';
+  $('endText').innerHTML="Слов: <b>"+totalToPlay+"</b> · Очки: <b>"+score+"</b>";
+  buildMistakeList();
+}
+
+function goMenu(){
+  $('endScreen').classList.add('hide');
+  $('startScreen').classList.remove('hide');
+  cancelAnimationFrame(raf);raf=null;
+  emojis.forEach(e=>e.el.remove());emojis=[];
+}
+
+$('btnKnow').onclick=()=>start('know');
+$('btnSpeed').onclick=()=>start('speed');
+$('btnRestart').onclick=()=>{
+  $('endScreen').classList.add('hide');
+  emojis.forEach(e=>e.el.remove());emojis=[];
+  start(mode, lastIndexList);
+};
+$('btnMistakes').onclick=()=>{
+  if(mistakes.size===0)return;
+  const list=[...mistakes];
+  $('endScreen').classList.add('hide');
+  emojis.forEach(e=>e.el.remove());emojis=[];
+  start(mode, list);
+};
+$('btnMenu').onclick=goMenu;
+</script>
 </body>
 </html>
